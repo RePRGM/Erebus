@@ -76,7 +76,7 @@ proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID
 
 
 proc get_library_address*(): HANDLE =
-  echo "\r\n[*] Parsing the PEB to search for the target DLL\r\n"
+  #echo "\r\n[*] Parsing the PEB to search for the target DLL\r\n"
   var Peb: PPEB = GetPPEB(PEB_OFFSET)
   var Ldr = Peb.Ldr
   var FirstEntry: PVOID = addr(Ldr.InMemoryOrderModuleList.Flink)
@@ -86,11 +86,11 @@ proc get_library_address*(): HANDLE =
     var compare: int = lstrcmpiW("kernel32.dll", cast[LPWSTR](Entry.BaseDllName.Buffer))
     if compare == 0:
       #echo "DLL names equal"
-        echo "\r\n[+] Found the DLL!\r\n"
+        #echo "\r\n[+] Found the DLL!\r\n"
         return cast[HANDLE](Entry.DllBase)
     Entry = cast[PND_LDR_DATA_TABLE_ENTRY](Entry.InMemoryOrderLinks.Flink)
     if not (Entry != FirstEntry):
-        echo "DLL not found for the current proc!"
+        #echo "DLL not found for the current proc!"
         break
 
 ##
@@ -98,6 +98,7 @@ proc get_library_address*(): HANDLE =
 ##
 
 proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
+  echo "Looking for: ", fname
   var dos: PIMAGE_DOS_HEADER
   var nt: PIMAGE_NT_HEADERS
   var data: array[0..15, IMAGE_DATA_DIRECTORY]
@@ -113,7 +114,7 @@ proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
   data = nt.OptionalHeader.DataDirectory
   
   if (data[0].Size == 0 or data[0].VirtualAddress == 0):
-    echo "[-] Data size == 0 or no VirtualAddress"
+    #echo "[-] Data size == 0 or no VirtualAddress"
     return nil
   exp = RVA(PIMAGE_EXPORT_DIRECTORY, hLibrary, data[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress)
   exp_size = data[0].Size
@@ -128,7 +129,7 @@ proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
   var addressOfFunctionsvalue = RVA2VA(PDWORD, cast[PVOID](hLibrary), exp.AddressOfFunctions)[]
   var names = RVA2VA(PDWORD, cast[PVOID](hLibrary), exp.AddressOfNames)[]
 
-  echo "\r\n[*] Checking DLL's Export Directory for the target function\r\n"
+  #echo "\r\n[*] Checking DLL's Export Directory for the target function\r\n"
     
   ##  iterate over all the exports
 
@@ -148,7 +149,7 @@ proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
         names += cast[DWORD](len(funcname) + 1)
         if fname == funcname:
             echo "\r\n[+] Found API call: ", funcname
-            echo "\r\n"
+            #echo "\r\n"
             echo "Calculating address: ", repr finalfunctionAddress
             functionAddress = finalfunctionAddress
             break
@@ -158,4 +159,4 @@ proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
   else:
     return functionAddress
 
-echo "Kernel32 is located at: ", toHex(get_library_address())
+#echo "Kernel32 is located at: ", toHex(get_library_address())

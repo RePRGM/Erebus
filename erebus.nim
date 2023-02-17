@@ -1,9 +1,9 @@
-import strutils
+import std/strutils
 import std/[sugar, algorithm]
-import sequtils
-import strformat
-import os
-import osproc
+import std/sequtils
+import std/strformat
+import std/os
+import std/osproc
 import nimcrypto
 import random
 import includes/rc4
@@ -69,14 +69,6 @@ elif obfuscate == "rc4":
     templatePath = "templates/rc4/"
 else:
     templatePath = "templates/uuid/"
-
-#[let
-    compileExe: string = "$1 c -l:resource.o -d:mingw --opt:none --app=gui --cpu=amd64 -d:strip -d:release -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-    compileCpl: string = "$1 c -l:resource.o -d:mingw --mm:arc -d:useMalloc --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-    compileDll: string = "$1 c -l:resource.o -d:mingw --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-    compileXll64: string = "$1 c -d:mingw --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-    compileXll32: string = "$1 c -d:mingw --opt:none --app=lib --nomain --cpu=i386 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-]#
 
 var xxdKey: string = execCmdEx("echo -n 'testKeytestKeyte' | xxd -p").output
 xxdKey.stripLineEnd
@@ -210,9 +202,9 @@ proc generatePayload(): void =
             tempFile = "temp_simpleexe.nim"
 
             if obfuscate != "uuid":
-                compileCmd = "$1 c -d:mingw --opt:none --app=gui --cpu=amd64 -d:strip -d:release -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw --opt:none --app=console --cpu=amd64 -d:danger -d:strip -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
             else :
-                compileCmd = "$1 c -l:resource.o -d:mingw --opt:none --app=gui --cpu=amd64 -d:strip -d:release -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw --opt:none --app=console --cpu=amd64 -d:danger -d:strip -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
         of "cpl":
             templatePath = joinPath(templatePath, "simpledll.nim")
             try:
@@ -222,9 +214,9 @@ proc generatePayload(): void =
             tempFile = "temp_simplecpl.nim"
 
             if obfuscate != "uuid":
-                compileCmd = "$1 c -l:resource.o -d:mingw --mm:arc -d:useMalloc --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw --nomain --passL='-masm=intel' -l:resource.o --mm:arc -d:useMalloc --opt:none --app=lib --cpu=amd64 -d:strip -d:release -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
             else:
-                compileCmd = "$1 c -d:mingw --mm:arc -d:useMalloc --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw --nomain --passL='-masm=intel' --mm:arc -d:useMalloc --opt:none --app=lib --cpu=amd64 -d:strip -d:release -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
         of "dll":
             templatePath = joinPath(templatePath, "simpledll.nim")
             try:
@@ -234,9 +226,9 @@ proc generatePayload(): void =
             tempFile = "temp_simpledll.nim"
 
             if obfuscate != "uuid":
-                compileCmd = "$1 c -l:resource.o -d:mingw --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw -l:resource.o --nomain --passL='-masm=intel' --opt:none --app=lib --cpu=amd64 -d:strip -d:release -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
             else:
-                compileCmd = "$1 c -d:mingw --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw --passL='-masm=intel' --nomain --opt:none --app=lib --cpu=amd64 -d:strip -d:release -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
         of "xll":
             templatePath = joinPath(templatePath, "simplexll.nim")
             try:
@@ -246,11 +238,11 @@ proc generatePayload(): void =
             tempFile = "temp_simplexll.nim"
 
             if obfuscate != "uuid" and architecture == "x64":
-                compileCmd = "$1 c -l:resource.o -d:mingw --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw -l:resource.o --nomain --passL='-masm=intel' --opt:none --app=lib --cpu=amd64 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
             elif obfuscate == "uuid" and architecture == "x64":
-                compileCmd = "$1 c -d:mingw --opt:none --app=lib --nomain --cpu=amd64 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw --nomain --passL='-masm=intel' --opt:none --app=lib --cpu=amd64 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
             elif obfuscate != "uuid" and architecture == "x86":
-                compileCmd = "$1 c -l:resource.o -d:mingw --opt:none --app=lib --nomain --cpu=i386 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
+                compileCmd = "$1 c -d:mingw -l:resource.o --nomain --passL='-masm=intel' --opt:none --app=lib --cpu=i386 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
             else:
                 compileCmd = "$1 c -d:mingw --opt:none --app=lib --nomain --cpu=i386 -d:strip -d:release -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
         else:
@@ -327,8 +319,10 @@ proc generatePayload(): void =
         stdout.styledWriteLine(fgRed, "[Failure] Cannot compile payload!")
         stdout.styledWriteLine(fgRed, compileResults.output)
         quit(1)
-    else:
-        stdout.styledWriteLine(fgGreen, "[Success] Payload compiled successfully!")
+    elif compileResults.exitCode == 0 and verbosity:
+        echo compileResults.output
+    
+    stdout.styledWriteLine(fgGreen, "[Success] Payload compiled successfully!")
 
 when isMainModule:
     generatePayload()

