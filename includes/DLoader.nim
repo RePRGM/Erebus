@@ -98,7 +98,7 @@ proc get_library_address*(): HANDLE =
 ##
 
 proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
-  echo "Looking for: ", fname
+  #echo "Looking for: ", fname
   var dos: PIMAGE_DOS_HEADER
   var nt: PIMAGE_NT_HEADERS
   var data: array[0..15, IMAGE_DATA_DIRECTORY]
@@ -148,9 +148,9 @@ proc get_function_address*(hLibrary: HMODULE; fname: cstring): PVOID =
             addressOfFunctionsvalue = functions[]
         names += cast[DWORD](len(funcname) + 1)
         if fname == funcname:
-            echo "\r\n[+] Found API call: ", funcname
+            #echo "\r\n[+] Found API call: ", funcname
             #echo "\r\n"
-            echo "Calculating address: ", repr finalfunctionAddress
+            #echo "Calculating address: ", repr finalfunctionAddress
             functionAddress = finalfunctionAddress
             break
     
