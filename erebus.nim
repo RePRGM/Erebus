@@ -69,18 +69,6 @@ elif obfuscate == "rc4":
     templatePath = "templates/rc4/"
 else:
     templatePath = "templates/uuid/"
-
-echo "[Status] Generating RC4 Key!"
-var genXXDKey = execCmdEx("echo -n 'testKeytestKeyte' | /usr/bin/xxd -p")
-var xxdKey: string
-if genXXDKey.exitCode == 0:
-    xxdKey = genXXDKey.output
-    xxdKey.stripLineEnd
-    echo "[Status] RC4 key hexadecimal is: $1" % [xxdKey]
-else:
-    stdout.styledWriteLine(fgRed, "[Failure] Key generation failed!")
-    echo "[Tip] Ensure xxd is in /usr/bin!"
-let opensslCmd: string = "/usr/bin/openssl enc -rc4 -in $1 -K $2 -nosalt -out encContent.bin" % [shellcodeFilePath, xxdKey]
     
 proc aesEncrypt(): void = 
     
@@ -110,6 +98,17 @@ proc aesEncrypt(): void =
 
 proc rc4Encrypt(): void =
     # RC4 Encrypt shellcode to file
+    echo "[Status] Generating RC4 Key!"
+    var genXXDKey = execCmdEx("echo -n 'testKeytestKeyte' | /usr/bin/xxd -p")
+    var xxdKey: string
+    if genXXDKey.exitCode == 0:
+        xxdKey = genXXDKey.output
+        xxdKey.stripLineEnd
+        echo "[Status] RC4 key hexadecimal is: $1" % [xxdKey]
+    else:
+        stdout.styledWriteLine(fgRed, "[Failure] Key generation failed!")
+        echo "[Tip] Ensure xxd is in /usr/bin!"
+    let opensslCmd: string = "/usr/bin/openssl enc -rc4 -in $1 -K $2 -nosalt -out encContent.bin" % [shellcodeFilePath, xxdKey]
     echo "[Status] Running the following command: $1" % [opensslCmd]
     try:
         let opensslResult = execCmdEx(opensslCmd)
@@ -313,10 +312,10 @@ proc generatePayload(): void =
         except IOError:
             stdout.styledWriteLine(fgRed, "[Failure] Copy from template file failed!")
     
-    echo "[Status] Compiling!"
     echo "[Status] Waiting on compiler!"
     let compileResults = execCmdEx(compileCmd)
     tempFile.removeFile()
+    echo "[Status] Cleaning up!"
     if fileExists("resource.o"):
         removeFile("resource.o")
     if fileExists("encContent.bin"):
