@@ -70,8 +70,16 @@ elif obfuscate == "rc4":
 else:
     templatePath = "templates/uuid/"
 
-var xxdKey: string = execCmdEx("echo -n 'testKeytestKeyte' | xxd -p").output
-xxdKey.stripLineEnd
+echo "[Status] Generating RC4 Key!"
+var genXXDKey = execCmdEx("echo -n 'testKeytestKeyte' | /usr/bin/xxd -p")
+var xxdKey: string
+if genXXDKey.exitCode == 0:
+    xxdKey = genXXDKey.output
+    xxdKey.stripLineEnd
+    echo "[Status] RC4 key hexadecimal is: $1" % [xxdKey]
+else:
+    stdout.styledWriteLine(fgRed, "[Failure] Key generation failed!")
+    echo "[Tip] Ensure xxd is in /usr/bin!"
 let opensslCmd: string = "/usr/bin/openssl enc -rc4 -in $1 -K $2 -nosalt -out encContent.bin" % [shellcodeFilePath, xxdKey]
     
 proc aesEncrypt(): void = 
@@ -102,18 +110,15 @@ proc aesEncrypt(): void =
 
 proc rc4Encrypt(): void =
     # RC4 Encrypt shellcode to file
-    echo "[Status] Encrypting shellcode with RC4!"
-    echo "[Status] Writing encrypted shellcode to file!"
+    echo "[Status] Running the following command: $1" % [opensslCmd]
     try:
-        #echo opensslCmd
         let opensslResult = execCmdEx(opensslCmd)
         if opensslResult.exitCode == 0:
             stdout.styledWriteLine(fgGreen, "[Success] RC4 Encrypted shellcode file created!")
-            #echo xxdKey
-            #echo opensslResult.output
         else:
             stdout.styledWriteLine(fgRed, "[Failure] OpenSSL failed!")
             stdout.styledWriteLine(fgRed, opensslResult.output)
+            echo "[Tip] Ensure OpenSSL is in /usr/bin!"
             quit(1)
     except IOError:
         stdout.styledWriteLine(fgRed, "[Failure] Could not create RC4 encrypted shellcode file!")

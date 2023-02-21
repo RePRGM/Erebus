@@ -286,7 +286,6 @@ proc getNtdll(): LPVOID =
   if bSuccess == 0:
     #echo "Failed in reading ntdll: ", GetLastError()
     quit(QuitFailure)
-  discard readLine(stdin)
   discard TerminateProcess_p(pi.hProcess, 0)
   return pntdll
 

