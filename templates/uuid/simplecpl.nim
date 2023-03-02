@@ -373,4 +373,3 @@ proc CPlApplet(hwndCpl: HWND, msg: UINT, lParam1: LPARAM, lParam2: LPARAM): LONG
         discard unhook(nt)
         #echo "unhook ran!"
         execute()
-    return 1

